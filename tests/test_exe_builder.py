@@ -19,6 +19,7 @@ class ExeBuilderTests(unittest.TestCase):
         command = module.pyinstaller_command()
 
         self.assertIn("--onefile", command)
+        self.assertEqual(command[command.index("credential_store") - 1], "--hidden-import")
         self.assertIn("--windowed", command)
         self.assertNotIn("--console", command)
         self.assertIn("--name", command)
