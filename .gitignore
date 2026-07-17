@@ -1,7 +1,6 @@
 # Secrets and user-specific configuration
 .env
 upd_provider_profiles.json
-authorized_users.json
 
 # Runtime data and logs
 *.log

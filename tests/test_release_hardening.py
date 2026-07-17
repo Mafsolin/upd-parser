@@ -26,6 +26,12 @@ class ReleaseHardeningTests(unittest.TestCase):
         self.assertIn("push:", workflow)
         self.assertIn("unittest discover", workflow)
 
+    def test_public_templates_do_not_reference_removed_bot(self):
+        env_example = (ROOT / ".env.example").read_text(encoding="utf-8").casefold()
+        portable_builder = (ROOT / "build_portable.py").read_text(encoding="utf-8").casefold()
+        self.assertNotIn("telegram", env_example)
+        self.assertNotIn("routerai", portable_builder)
+
 
 if __name__ == "__main__":
     unittest.main()

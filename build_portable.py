@@ -100,19 +100,6 @@ def env_example_content() -> str:
     )
 
 
-def read_routerai_key() -> str | None:
-    env_path = ROOT / ".env"
-    if not env_path.exists():
-        return None
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped.startswith("ROUTERAI_API_KEY="):
-            value = stripped.split("=", 1)[1].strip()
-            if value and value != "YOUR_ROUTERAI_KEY_HERE":
-                return value
-    return None
-
-
 def copy_app_files(target: Path) -> None:
     target.mkdir(parents=True, exist_ok=True)
     (target / "input").mkdir(exist_ok=True)

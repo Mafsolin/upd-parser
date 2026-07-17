@@ -12,6 +12,9 @@ UPD Parser extracts item data from photos of Russian Universal Transfer Document
 - Russian and English interface;
 - GitHub Releases update checks and one-file EXE updates;
 - provider profiles remain intact during an EXE update.
+- provider API keys are protected with Windows DPAPI;
+- downloaded updates are verified with SHA-256;
+- Excel output is written atomically, preserving an existing report if processing fails.
 
 ## Getting started
 
@@ -21,6 +24,7 @@ UPD Parser extracts item data from photos of Russian Universal Transfer Document
 4. Add photos and select **Process**.
 
 The portable build is published as `UPD_Parser_Portable.zip`.
+On first launch, the portable console wizard asks for the provider profile fields.
 
 ## Updates
 
@@ -37,6 +41,6 @@ python build_portable.py
 
 ## Security
 
-API keys are stored locally in `upd_provider_profiles.json`. Never commit this file or `.env`.
+Profiles are stored locally in `upd_provider_profiles.json`; API keys are protected with Windows DPAPI and can only be decrypted by the current Windows account. UPD images are sent to the third-party API provider selected by the user. Remote provider endpoints must use HTTPS.
 
 License: [MIT](LICENSE). Developer: Mafsolin.
