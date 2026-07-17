@@ -73,6 +73,8 @@ class UpdateManagerTests(unittest.TestCase):
         self.assertNotIn(profiles.name, content)
         self.assertIn("Backup", content)
         self.assertIn("Start-Process", content)
+        self.assertIn("Get-Process", content)
+        self.assertNotIn("Wait-Process", content)
 
 
 if __name__ == "__main__":

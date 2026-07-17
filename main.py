@@ -117,7 +117,7 @@ def main() -> None:
 
     # ── Итог ────────────────────────────────────────────────────────────────
     print_separator("═")
-    print(f"  Готово!")
+    print("  Готово!")
     print(f"  Обработано документов : {total_docs} / {len(folders)}")
     print(f"  Добавлено строк       : {total_items}")
     print(f"  Ошибок                : {len(errors)}")

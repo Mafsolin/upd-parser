@@ -83,7 +83,8 @@ class ImagePreparationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "oriented.jpg"
             image = Image.new("RGB", (4, 2), "blue")
-            exif = image.getexif(); exif[274] = 6
+            exif = image.getexif()
+            exif[274] = 6
             image.save(path, exif=exif)
             mime, encoded = ai_parser._image_to_base64(path)
             with Image.open(io.BytesIO(base64.b64decode(encoded))) as prepared:
@@ -115,7 +116,8 @@ class ApiHardeningTests(unittest.TestCase):
 
     def test_response_schema_rejects_null_or_array_without_type_errors(self):
         for payload in ({"choices": None}, [], {"choices": []}, {"choices": [None]}):
-            response = Mock(ok=True); response.json.return_value = payload
+            response = Mock(ok=True)
+            response.json.return_value = payload
             with self.subTest(payload=payload), self.assertRaisesRegex(ValueError, "формат"):
                 ai_parser._response_content(response)
 
@@ -140,7 +142,8 @@ class ApiHardeningTests(unittest.TestCase):
     def test_retries_network_and_retryable_http_with_retry_after(self, post, sleep):
         busy = Mock(ok=False, status_code=429, headers={"Retry-After": "3"}, text="busy")
         busy.json.return_value = {"error": "busy"}
-        good = Mock(ok=True); good.json.return_value = {"choices": [{"message": {"content": "OK"}}]}
+        good = Mock(ok=True)
+        good.json.return_value = {"choices": [{"message": {"content": "OK"}}]}
         post.side_effect = [requests.ConnectionError("offline"), busy, good]
         progress = []
         result = self.parser(progress.append)._call_api_with_retry([], "doc")

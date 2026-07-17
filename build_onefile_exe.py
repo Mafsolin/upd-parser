@@ -16,6 +16,7 @@ OUTPUT_DIR = ROOT.parent / "UPD_Parser_OneFile"
 BUILD_DIR = ROOT / ".pyinstaller_build"
 SPEC_DIR = ROOT / ".pyinstaller_spec"
 EXE_NAME = "UPD_Parser"
+PYINSTALLER_REQUIREMENT = "PyInstaller==6.21.0"
 
 
 def pyinstaller_command() -> list[str]:
@@ -71,7 +72,7 @@ def pyinstaller_command() -> list[str]:
 def ensure_pyinstaller() -> None:
     if importlib.util.find_spec("PyInstaller") is not None:
         return
-    subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller"], check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", PYINSTALLER_REQUIREMENT], check=True)
 
 
 def clean_output() -> None:

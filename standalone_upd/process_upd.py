@@ -62,10 +62,10 @@ OUTPUT_DIR = APP_DIR / "output"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app_version import APP_VERSION, GITHUB_URL
-from i18n import LANGUAGES, tr
-from update_manager import apply_downloaded_update, check_for_update, download_update
-from credential_store import protect_secret, unprotect_secret
+from app_version import APP_VERSION, GITHUB_URL  # noqa: E402
+from i18n import LANGUAGES, tr  # noqa: E402
+from update_manager import apply_downloaded_update, check_for_update, download_update  # noqa: E402
+from credential_store import protect_secret, unprotect_secret  # noqa: E402
 
 logger = logging.getLogger("standalone_upd")
 
@@ -1084,7 +1084,8 @@ class MinimalUpdApp:
                         *draft,
                     )
                 except Exception as exc:
-                    window.after(0, lambda: finish_check(False, str(exc)))
+                    message = str(exc)
+                    window.after(0, lambda message=message: finish_check(False, message))
                 else:
                     window.after(0, lambda: finish_check(True, result))
 
