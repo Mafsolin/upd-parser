@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from data_normalizer import normalize_document, normalize_numeric_value
+from data_normalizer import excel_numeric_value, normalize_document, normalize_numeric_value
 from excel_writer import ExcelWriter
 
 
@@ -11,6 +11,10 @@ class DataNormalizerTests(unittest.TestCase):
         self.assertEqual(normalize_numeric_value(" 1 234.50- "), "1234,50")
         self.assertEqual(normalize_numeric_value("−10.25"), "10,25")
         self.assertEqual(normalize_numeric_value("1\u00a0234.5"), "1234,5")
+
+    def test_excel_numeric_value_is_a_number_not_text(self):
+        self.assertEqual(excel_numeric_value("1 234,50-"), 1234.50)
+        self.assertEqual(excel_numeric_value("без НДС"), "безНДС")
 
     def test_normalizes_only_exported_numeric_fields(self):
         data = normalize_document({
@@ -45,7 +49,7 @@ class DataNormalizerTests(unittest.TestCase):
             workbook = load_workbook(path)
             values = [workbook.active.cell(2, column).value for column in (5, 6, 7, 8)]
             workbook.close()
-        self.assertEqual(values, ["1,1", "2,2", "3,3", "4,4"])
+        self.assertEqual(values, [1.1, 2.2, 3.3, 4.4])
 
     def test_rejects_invalid_item_shape(self):
         with self.assertRaisesRegex(ValueError, "Товарная строка"):

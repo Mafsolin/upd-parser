@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 NUMERIC_FIELDS = ("qty", "price", "total_with_vat", "tax")
@@ -17,6 +18,18 @@ def normalize_numeric_value(value: Any) -> str:
     if isinstance(value, (dict, list, tuple, set)):
         raise ValueError("Числовое поле должно быть строкой или числом.")
     return str(value).replace("\u00a0", "").replace(" ", "").translate(_MINUS_SIGNS).replace(".", ",").strip()
+
+
+def excel_numeric_value(value: Any) -> Decimal | str:
+    """Convert a normalized numeric string to a true Excel number when possible."""
+    normalized = normalize_numeric_value(value)
+    if not normalized:
+        return ""
+    try:
+        return Decimal(normalized.replace(",", "."))
+    except InvalidOperation:
+        # Values such as "без НДС" remain text instead of being corrupted.
+        return normalized
 
 
 def _text(value: Any, field_name: str) -> str:

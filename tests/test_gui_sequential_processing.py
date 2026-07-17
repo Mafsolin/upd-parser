@@ -40,8 +40,9 @@ class GuiSequentialProcessingTests(unittest.TestCase):
 
         self.assertEqual(rows, 1)
         self.assertEqual(values[2], "Перчатки")
-        self.assertEqual(values[4], "10")
-        self.assertEqual(values[6], "1200,00")
+        self.assertEqual(values[4], 10)
+        self.assertEqual(values[6], 1200)
+        self.assertIsInstance(values[6], (int, float))
         self.assertIn(values[8], ("", None))
         self.assertIn(values[9], ("", None))
 

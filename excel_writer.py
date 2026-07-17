@@ -3,6 +3,7 @@ excel_writer.py — запись извлечённых данных из УПД
 """
 
 import logging
+from decimal import Decimal
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
@@ -10,7 +11,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from config import EXCEL_FILE
-from data_normalizer import normalize_document
+from data_normalizer import excel_numeric_value, normalize_document
 
 logger = logging.getLogger(__name__)
 
@@ -141,10 +142,10 @@ class ExcelWriter:
                 date,
                 item.get("name",  ""),
                 item.get("unit",  ""),
-                item.get("qty",   ""),
-                item.get("price", ""),
-                item.get("total_with_vat", item.get("cost", "")),
-                item.get("tax",   ""),
+                excel_numeric_value(item.get("qty", "")),
+                excel_numeric_value(item.get("price", "")),
+                excel_numeric_value(item.get("total_with_vat", item.get("cost", ""))),
+                excel_numeric_value(item.get("tax", "")),
                 invoice_number,
                 seller,
             ]
@@ -159,6 +160,8 @@ class ExcelWriter:
                     vertical="center",
                     wrap_text=True,
                 )
+                if col_idx in {5, 6, 7, 8} and isinstance(cell.value, (int, float, Decimal)):
+                    cell.number_format = "0.##############"
             ws.row_dimensions[last_row].height = 18
 
         wb.save(self.path)
