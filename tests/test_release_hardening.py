@@ -31,6 +31,8 @@ class ReleaseHardeningTests(unittest.TestCase):
         portable_builder = (ROOT / "build_portable.py").read_text(encoding="utf-8").casefold()
         self.assertNotIn("telegram", env_example)
         self.assertNotIn("routerai", portable_builder)
+        self.assertIn("raw.githubusercontent.com/pypa/get-pip/", portable_builder)
+        self.assertNotIn('GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"', portable_builder)
 
 
 if __name__ == "__main__":

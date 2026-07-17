@@ -22,9 +22,9 @@ CACHE_DIR = ROOT / ".portable_cache"
 PYTHON_VERSION = "3.12.10"
 PYTHON_ZIP = f"python-{PYTHON_VERSION}-embed-amd64.zip"
 PYTHON_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/{PYTHON_ZIP}"
-GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
+GET_PIP_URL = "https://raw.githubusercontent.com/pypa/get-pip/3b73145063be545b649ad9ca83ea8da5fc915a4f/public/get-pip.py"
 PYTHON_ZIP_SHA256 = "4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3"
-GET_PIP_SHA256 = "106ae019e371c7d8cb3699c75607a9b7a4d31e2b95c575362c8bcfe3d41353fd"
+GET_PIP_SHA256 = "a341e1a43e38001c551a1508a73ff23636a11970b61d901d9a1cad2a18f57055"
 
 APP_FILES = [
     "ai_parser.py",

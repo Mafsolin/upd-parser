@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.8
+## 1.0.9
 
 - protected provider API keys with Windows DPAPI and migrated legacy plaintext profiles;
 - prevented Excel formula injection and destructive report replacement;
