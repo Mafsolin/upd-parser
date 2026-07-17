@@ -577,12 +577,14 @@ class MinimalUpdApp:
 
         header = ttk.Frame(container, style="App.TFrame")
         header.pack(fill="x")
-        ttk.Label(header, text=self.t("app_title"), style="Title.TLabel").pack(anchor="w")
-        ttk.Label(
+        self.title_label = ttk.Label(header, text=self.t("app_title"), style="Title.TLabel")
+        self.title_label.pack(anchor="w")
+        self.subtitle_label = ttk.Label(
             header,
             text=self.t("select_photos"),
             style="Muted.TLabel",
-        ).pack(anchor="w", pady=(4, 0))
+        )
+        self.subtitle_label.pack(anchor="w", pady=(4, 0))
 
         toolbar = ttk.Frame(container, style="App.TFrame")
         toolbar.pack(fill="x", pady=(18, 12))
@@ -665,29 +667,18 @@ class MinimalUpdApp:
     def t(self, key: str, **kwargs: object) -> str:
         return tr(self.language, key, **kwargs)
 
-    def restart_for_language_change(self) -> None:
-        """Restart through a detached batch launcher after the current EXE exits."""
-        launcher = Path(tempfile.gettempdir()) / "upd_parser_restart_language.bat"
-        if is_frozen():
-            start_command = f'start "" "{sys.executable}"'
-        else:
-            start_command = f'start "" "{sys.executable}" "{Path(__file__).resolve()}"'
-        launcher.write_text(
-            "@echo off\r\n"
-            "timeout /t 1 /nobreak >nul\r\n"
-            f"cd /d \"{APP_DIR}\"\r\n"
-            f"{start_command}\r\n"
-            "del \"%~f0\"\r\n",
-            encoding="utf-8",
-        )
-        creation_flags = (
-            getattr(subprocess, "CREATE_NO_WINDOW", 0)
-            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-            | getattr(subprocess, "DETACHED_PROCESS", 0)
-        )
-        subprocess.Popen(["cmd", "/c", str(launcher)], creationflags=creation_flags)
-        self.root.destroy()
-        os._exit(0)
+    def apply_language(self, language: str) -> None:
+        """Apply the selected language to the existing main window without restart."""
+        self.language = language
+        self.root.title(self.t("app_title"))
+        self.title_label.configure(text=self.t("app_title"))
+        self.subtitle_label.configure(text=self.t("select_photos"))
+        self.add_button.configure(text=self.t("add_photos"))
+        self.clear_button.configure(text=self.t("clear"))
+        self.settings_button.configure(text=self.t("settings"))
+        self.process_button.configure(text=self.t("process"))
+        self.status_var.set(self.t("ready"))
+        self.refresh_file_list()
 
     def _configure_style(self) -> None:
         style = self.ttk.Style(self.root)
@@ -856,7 +847,9 @@ class MinimalUpdApp:
                 return
             try:
                 save_app_preferences(APP_DIR, selected_language, auto_update_enabled(APP_DIR))
-                self.restart_for_language_change()
+                self.apply_language(selected_language)
+                window.destroy()
+                self.open_settings()
             except OSError as exc:
                 messagebox.showerror(self.t("settings"), str(exc), parent=window)
 

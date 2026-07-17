@@ -1,5 +1,5 @@
 """Single source of truth for the desktop application version."""
 
-APP_VERSION = "1.0.4"
+APP_VERSION = "1.0.5"
 GITHUB_REPOSITORY = "Mafsolin/upd-parser"
 GITHUB_URL = f"https://github.com/{GITHUB_REPOSITORY}"
