@@ -1,0 +1,55 @@
+"""Russian and English strings used by the desktop application."""
+
+LANGUAGES = {"ru": "Русский", "en": "English"}
+
+STRINGS = {
+    "ru": {
+        "app_title": "УПД Парсер", "select_photos": "Выберите фото. Каждый файл обработается отдельным УПД.",
+        "add_photos": "Добавить фото", "clear": "Очистить", "settings": "Настройки", "process": "Обработать",
+        "no_files": "Файлы не выбраны", "files_selected": "Выбрано файлов: {count}", "ready": "Готов к обработке",
+        "add_photos_log": "Добавьте фото УПД для обработки.", "added_files": "Добавлено файлов: {count}",
+        "providers": "Провайдеры", "updates": "Обновления", "about": "О программе", "language": "Язык интерфейса",
+        "provider_profile": "Профиль провайдера", "new_provider": "Новый пользовательский профиль", "name": "Название",
+        "base_url": "Базовый URL", "model": "Модель", "api_key": "API-ключ", "show_key": "Показать ключ",
+        "add_provider": "Добавить провайдера", "new_profile": "Новый профиль", "delete": "Удалить",
+        "save": "Сохранить", "cancel": "Отмена", "check_connection": "Проверить подключение",
+        "checking_provider": "Проверяю подключение к провайдеру…", "provider_saved": "Провайдер сохранён.",
+        "current_version": "Текущая версия: {version}", "check_updates": "Проверить обновления",
+        "auto_check": "Проверять обновления при запуске", "checking_updates": "Проверяю обновления…",
+        "update_available": "Доступна версия {version}.", "latest_version": "Установлена последняя версия.",
+        "install_update": "Скачать и установить", "developer": "Разработчик: Mafsolin", "license": "Лицензия: MIT",
+        "about_text": "УПД Парсер извлекает товарные данные из фотографий УПД и формирует Excel-файл.",
+        "github": "GitHub: {url}", "select_images": "Выберите фото УПД", "images": "Изображения", "all_files": "Все файлы",
+        "save_excel": "Сохранить Excel", "processing_started": "Обработка началась", "start_processing": "Старт обработки.",
+        "need_photo": "Добавьте хотя бы одно фото.", "error": "Ошибка", "update_error": "Не удалось проверить обновления: {error}",
+        "restart_required": "Язык будет применён после перезапуска приложения.", "download_update": "Скачиваю обновление…",
+        "downloaded_update": "Обновление скачано. Приложение будет перезапущено.",
+    },
+    "en": {
+        "app_title": "UPD Parser", "select_photos": "Select photos. Each file will be processed as a separate UPD document.",
+        "add_photos": "Add photos", "clear": "Clear", "settings": "Settings", "process": "Process",
+        "no_files": "No files selected", "files_selected": "Files selected: {count}", "ready": "Ready to process",
+        "add_photos_log": "Add UPD photos to start processing.", "added_files": "Files added: {count}",
+        "providers": "Providers", "updates": "Updates", "about": "About", "language": "Interface language",
+        "provider_profile": "Provider profile", "new_provider": "New custom provider", "name": "Name",
+        "base_url": "Base URL", "model": "Model", "api_key": "API key", "show_key": "Show key",
+        "add_provider": "Save provider", "new_profile": "New profile", "delete": "Delete",
+        "save": "Save", "cancel": "Cancel", "check_connection": "Check connection",
+        "checking_provider": "Checking provider connection…", "provider_saved": "Provider saved.",
+        "current_version": "Current version: {version}", "check_updates": "Check for updates",
+        "auto_check": "Check for updates at startup", "checking_updates": "Checking for updates…",
+        "update_available": "Version {version} is available.", "latest_version": "You are using the latest version.",
+        "install_update": "Download and install", "developer": "Developer: Mafsolin", "license": "License: MIT",
+        "about_text": "UPD Parser extracts item data from UPD document photos and creates an Excel file.",
+        "github": "GitHub: {url}", "select_images": "Select UPD photos", "images": "Images", "all_files": "All files",
+        "save_excel": "Save Excel", "processing_started": "Processing started", "start_processing": "Processing started.",
+        "need_photo": "Add at least one photo.", "error": "Error", "update_error": "Unable to check for updates: {error}",
+        "restart_required": "The language will be applied after the application restarts.", "download_update": "Downloading update…",
+        "downloaded_update": "Update downloaded. The application will restart.",
+    },
+}
+
+
+def tr(language: str, key: str, **kwargs: object) -> str:
+    text = STRINGS.get(language, STRINGS["ru"]).get(key, STRINGS["ru"].get(key, key))
+    return text.format(**kwargs)

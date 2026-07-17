@@ -1,0 +1,35 @@
+name: Release Windows builds
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+      - name: Build one-file EXE
+        run: python build_onefile_exe.py
+      - name: Build portable version
+        run: python build_portable.py
+      - name: Package portable version
+        shell: pwsh
+        run: Compress-Archive -Path ../UPD_Parser_Portable/* -DestinationPath UPD_Parser_Portable.zip
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            ../UPD_Parser_OneFile/UPD_Parser.exe
+            UPD_Parser_Portable.zip
