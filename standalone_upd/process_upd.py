@@ -680,8 +680,14 @@ class MinimalUpdApp:
             "del \"%~f0\"\r\n",
             encoding="utf-8",
         )
-        subprocess.Popen(["cmd", "/c", str(launcher)], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        creation_flags = (
+            getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            | getattr(subprocess, "DETACHED_PROCESS", 0)
+        )
+        subprocess.Popen(["cmd", "/c", str(launcher)], creationflags=creation_flags)
         self.root.destroy()
+        os._exit(0)
 
     def _configure_style(self) -> None:
         style = self.ttk.Style(self.root)
@@ -848,9 +854,11 @@ class MinimalUpdApp:
             selected_language = language_var.get().split(":", 1)[0]
             if selected_language not in LANGUAGES or selected_language == self.language:
                 return
-            save_app_preferences(APP_DIR, selected_language, auto_update_enabled(APP_DIR))
-            window.destroy()
-            self.restart_for_language_change()
+            try:
+                save_app_preferences(APP_DIR, selected_language, auto_update_enabled(APP_DIR))
+                self.restart_for_language_change()
+            except OSError as exc:
+                messagebox.showerror(self.t("settings"), str(exc), parent=window)
 
         language_box.bind("<<ComboboxSelected>>", change_language)
 
