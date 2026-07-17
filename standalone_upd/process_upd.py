@@ -96,20 +96,21 @@ def default_gui_save_dir() -> Path:
     return APP_DIR if APP_DIR.exists() else Path.cwd()
 
 
-def ask_excel_output_path(parent, initial_dir: Path | None = None) -> Path | None:
+def ask_excel_output_path(parent, initial_dir: Path | None = None, language: str | None = None) -> Path | None:
     from tkinter import filedialog
 
+    language = language or load_language(APP_DIR)
     save_dir = Path(initial_dir) if initial_dir else default_gui_save_dir()
     default_path = build_output_path(save_dir)
     raw_path = filedialog.asksaveasfilename(
         parent=parent,
-        title="Сохранить Excel",
+        title=tr(language, "save_excel"),
         initialdir=str(save_dir),
         initialfile=default_path.name,
         defaultextension=".xlsx",
         filetypes=[
             ("Excel", "*.xlsx"),
-            ("Все файлы", "*.*"),
+            (tr(language, "all_files"), "*.*"),
         ],
         confirmoverwrite=True,
     )
@@ -124,14 +125,30 @@ def ask_excel_output_path(parent, initial_dir: Path | None = None) -> Path | Non
 
 def prepare_selected_excel_path(path: Path | str) -> Path:
     prepared = Path(path)
-    if not prepared.suffix:
+    if prepared.suffix.lower() != ".xlsx":
         prepared = prepared.with_suffix(".xlsx")
     prepared.parent.mkdir(parents=True, exist_ok=True)
-    if prepared.exists():
-        if not prepared.is_file():
-            raise IsADirectoryError(f"Выбранный путь не является файлом: {prepared}")
-        prepared.unlink()
+    if prepared.exists() and not prepared.is_file():
+        raise IsADirectoryError(f"Выбранный путь не является файлом: {prepared}")
     return prepared
+
+
+def build_staging_excel_path(destination: Path | str) -> Path:
+    """Return a unique sibling path so the final report can be replaced atomically."""
+    destination = Path(destination)
+    return destination.with_name(f".{destination.stem}.{uuid.uuid4().hex}.tmp.xlsx")
+
+
+def commit_staged_excel(staging: Path | str, destination: Path | str) -> None:
+    staging_path = Path(staging)
+    destination_path = Path(destination)
+    if not staging_path.is_file():
+        raise FileNotFoundError(f"Временный Excel-файл не создан: {staging_path}")
+    os.replace(staging_path, destination_path)
+
+
+def discard_staged_excel(staging: Path | str) -> None:
+    Path(staging).unlink(missing_ok=True)
 
 
 def prepare_runtime_dirs() -> None:
@@ -337,9 +354,10 @@ def ensure_api_key(app_dir: Path, prompt_fn: Callable[[str], str] | None | objec
     return save_api_key(app_dir, api_key)
 
 
-def install_text_context_menu(widget, menu_factory: Callable[[Any], Any] | None = None):
+def install_text_context_menu(widget, menu_factory: Callable[[Any], Any] | None = None, language: str | None = None):
     import tkinter as tk
 
+    language = language or load_language(APP_DIR)
     menu = menu_factory(widget) if menu_factory else tk.Menu(widget, tearoff=0)
     def paste_from_clipboard(_event=None):
         """Insert clipboard text directly; this also works for masked API-key fields."""
@@ -357,18 +375,19 @@ def install_text_context_menu(widget, menu_factory: Callable[[Any], Any] | None 
     def handle_control_key(event):
         # Tk maps Ctrl+V by the active keyboard layout. On a Russian layout the
         # keysym is not "v", but Windows still reports physical V as keycode 86.
-        if getattr(event, "keycode", None) == 86:
+        keycode = getattr(event, "keycode", None)
+        if keycode == 86:
             return paste_from_clipboard(event)
+        sequence = {65: "<<SelectAll>>", 67: "<<Copy>>", 88: "<<Cut>>"}.get(keycode)
+        if sequence:
+            widget.event_generate(sequence)
+            return "break"
         return None
 
-    commands = [
-        ("Вырезать", "<<Cut>>"),
-        ("Копировать", "<<Copy>>"),
-        ("Выделить все", "<<SelectAll>>"),
-    ]
+    commands = [(tr(language, "cut"), "<<Cut>>"), (tr(language, "copy"), "<<Copy>>"), (tr(language, "select_all"), "<<SelectAll>>")]
     for label, sequence in commands:
         menu.add_command(label=label, command=lambda seq=sequence: widget.event_generate(seq))
-    menu.add_command(label="Вставить", command=paste_from_clipboard)
+    menu.add_command(label=tr(language, "paste"), command=paste_from_clipboard)
 
     def show_menu(event) -> None:
         try:
@@ -378,6 +397,7 @@ def install_text_context_menu(widget, menu_factory: Callable[[Any], Any] | None 
 
     widget.bind("<Button-3>", show_menu)
     widget.bind("<Control-KeyPress>", handle_control_key)
+    widget.bind("<Shift-Insert>", paste_from_clipboard)
     return menu
 
 
@@ -404,6 +424,7 @@ def process_image_sequence(
     parser_factory: Callable[[], Any] | None = None,
     writer_factory: Callable[[Path], Any] | None = None,
     on_progress: ProgressCallback | None = None,
+    language: str = DEFAULT_LANGUAGE,
 ) -> tuple[list[dict[str, Any]], int]:
     """
     Processes selected images one by one.
@@ -428,7 +449,7 @@ def process_image_sequence(
             on_progress,
             {
                 "type": "log",
-                "message": f"[{index}/{total}] Обрабатываю: {image_path.name}",
+                "message": tr(language, "processing_file", index=index, total=total, name=image_path.name),
             },
         )
 
@@ -455,7 +476,7 @@ def process_image_sequence(
                 on_progress,
                 {
                     "type": "log",
-                    "message": f"Готово: {image_path.name}, строк добавлено: {rows_added}",
+                    "message": tr(language, "file_done", name=image_path.name, rows=rows_added),
                 },
             )
         except Exception as exc:
@@ -471,7 +492,7 @@ def process_image_sequence(
                 on_progress,
                 {
                     "type": "error",
-                    "message": f"Ошибка: {image_path.name}: {exc}",
+                    "message": tr(language, "file_error", name=image_path.name, error=exc),
                 },
             )
 
@@ -531,6 +552,7 @@ def run_cli() -> int:
         images,
         output_path,
         on_progress=_log_cli_event,
+        language=load_language(APP_DIR),
     )
     errors = [item for item in summaries if item.get("error")]
 
@@ -558,6 +580,7 @@ class MinimalUpdApp:
         self.root.title(self.t("app_title"))
         self.root.geometry("760x560")
         self.root.minsize(680, 480)
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.files: list[Path] = []
         self.events: queue.Queue[dict[str, Any]] = queue.Queue()
@@ -666,6 +689,17 @@ class MinimalUpdApp:
 
     def t(self, key: str, **kwargs: object) -> str:
         return tr(self.language, key, **kwargs)
+
+    def on_close(self) -> None:
+        if self.processing:
+            from tkinter import messagebox
+            messagebox.showwarning(
+                self.t("app_title"),
+                self.t("processing_close_blocked"),
+                parent=self.root,
+            )
+            return
+        self.root.destroy()
 
     def apply_language(self, language: str) -> None:
         """Apply the selected language to the existing main window without restart."""
@@ -809,7 +843,7 @@ class MinimalUpdApp:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def open_settings(self) -> None:
+    def open_settings(self, draft: dict[str, Any] | None = None, selected_tab: int = 0) -> None:
         from tkinter import messagebox, ttk
         from config import get_provider
 
@@ -846,10 +880,19 @@ class MinimalUpdApp:
             if selected_language not in LANGUAGES or selected_language == self.language:
                 return
             try:
-                save_app_preferences(APP_DIR, selected_language, auto_update_enabled(APP_DIR))
+                draft_state = {
+                    "provider_id": selected_id(),
+                    "editing_custom_id": editing_custom_id,
+                    "name": name_var.get(),
+                    "base_url": url_var.get(),
+                    "model": model_var.get(),
+                    "api_key": key_var.get(),
+                }
+                current_tab = notebook.index(notebook.select())
+                save_app_preferences(APP_DIR, selected_language, auto_update_var.get())
                 self.apply_language(selected_language)
                 window.destroy()
-                self.open_settings()
+                self.open_settings(draft=draft_state, selected_tab=current_tab)
             except OSError as exc:
                 messagebox.showerror(self.t("settings"), str(exc), parent=window)
 
@@ -871,12 +914,12 @@ class MinimalUpdApp:
             ttk.Label(providers_frame, text=label, style="Small.TLabel").pack(anchor="w")
             widget = ttk.Entry(providers_frame, textvariable=variable, width=52)
             widget.pack(fill="x", pady=(6, 12))
-            install_text_context_menu(widget)
+            install_text_context_menu(widget, language=self.language)
             entries[label] = widget
         ttk.Label(providers_frame, text=self.t("api_key"), style="Small.TLabel").pack(anchor="w")
         key_entry = ttk.Entry(providers_frame, textvariable=key_var, width=52, show="*")
         key_entry.pack(fill="x", pady=(6, 8))
-        install_text_context_menu(key_entry)
+        install_text_context_menu(key_entry, language=self.language)
         show_var = self.tk.BooleanVar(value=False)
         ttk.Checkbutton(providers_frame, text=self.t("show_key"), variable=show_var, command=lambda: key_entry.configure(show="" if show_var.get() else "*")).pack(anchor="w", pady=(0, 12))
 
@@ -891,7 +934,7 @@ class MinimalUpdApp:
             state = self.tk.NORMAL if is_custom else self.tk.DISABLED
             for widget in entries.values():
                 widget.configure(state=state)
-            delete_button.configure(state=self.tk.NORMAL if is_custom else self.tk.DISABLED)
+            delete_button.configure(state=self.tk.NORMAL if is_custom and editing_custom_id else self.tk.DISABLED)
 
         def load_profile(*_args) -> None:
             nonlocal editing_custom_id
@@ -937,9 +980,15 @@ class MinimalUpdApp:
 
         def remove_profile() -> None:
             provider_id = selected_id()
+            if not provider_id or editing_custom_id is None:
+                return
             if not messagebox.askyesno(self.t("delete"), f"{self.t('delete')} «{name_var.get()}»?", parent=window):
                 return
-            delete_custom_profile(APP_DIR, provider_id)
+            try:
+                delete_custom_profile(APP_DIR, provider_id)
+            except Exception as exc:
+                messagebox.showerror(self.t("settings"), str(exc), parent=window)
+                return
             if list_provider_profiles(APP_DIR):
                 refresh_profiles(list_provider_profiles(APP_DIR)[0]["id"])
             else:
@@ -985,19 +1034,15 @@ class MinimalUpdApp:
                 checking_var.set("")
 
         def check_provider() -> None:
-            try:
-                provider_id = persist()
-            except Exception as exc:
-                messagebox.showerror(self.t("check_connection"), str(exc), parent=window)
-                return
-            model = model_var.get()
-            api_key = key_var.get()
+            draft = (name_var.get(), url_var.get(), model_var.get(), key_var.get())
             set_checking(True)
 
             def run_check() -> None:
                 from ai_parser import AIParser
                 try:
-                    result = AIParser.ping(provider_id, model, api_key)
+                    result = AIParser.ping_connection(
+                        *draft,
+                    )
                 except Exception as exc:
                     window.after(0, lambda: finish_check(False, str(exc)))
                 else:
@@ -1020,7 +1065,7 @@ class MinimalUpdApp:
             except Exception as exc:
                 messagebox.showerror(self.t("settings"), str(exc), parent=window)
                 return
-            self.append_log(f"Настройки сохранены: {get_provider(provider_id).label} / {model_var.get()}")
+            self.append_log(self.t("settings_saved", provider=get_provider(provider_id).label, model=model_var.get()))
             if selected_language != self.language:
                 messagebox.showinfo(self.t("settings"), self.t("restart_required"), parent=window)
             window.destroy()
@@ -1085,7 +1130,7 @@ class MinimalUpdApp:
                 try:
                     downloaded = download_update(release)
                     if not is_frozen():
-                        raise RuntimeError("Автоустановка доступна только в EXE-версии.")
+                        raise RuntimeError(self.t("cannot_autoinstall"))
                     apply_downloaded_update(Path(sys.executable), downloaded)
                 except Exception as exc:
                     error = str(exc)
@@ -1108,10 +1153,26 @@ class MinimalUpdApp:
         github_label.pack(anchor="w", pady=(10, 0))
         github_label.bind("<Button-1>", lambda _event: __import__("webbrowser").open(GITHUB_URL))
         profile_box.bind("<<ComboboxSelected>>", load_profile)
-        if profiles:
+        if draft is not None:
+            draft_provider_id = str(draft.get("provider_id", ""))
+            if draft_provider_id in by_id:
+                refresh_profiles(draft_provider_id)
+            else:
+                add_profile()
+            editing_custom_id = draft.get("editing_custom_id") or None
+            name_var.set(str(draft.get("name", "")))
+            url_var.set(str(draft.get("base_url", "")))
+            model_var.set(str(draft.get("model", "")))
+            key_var.set(str(draft.get("api_key", "")))
+            delete_button.configure(state=self.tk.NORMAL if editing_custom_id else self.tk.DISABLED)
+        elif profiles:
             refresh_profiles(active_id or profiles[0]["id"])
         else:
             add_profile()
+        try:
+            notebook.select(max(0, min(selected_tab, notebook.index("end") - 1)))
+        except self.tk.TclError:
+            pass
         window.grab_set()
         key_entry.focus_set()
 
@@ -1121,59 +1182,70 @@ class MinimalUpdApp:
         if self.processing:
             return
         if not self.files:
-            messagebox.showinfo("УПД Парсер", "Добавьте хотя бы одно фото.")
+            messagebox.showinfo(self.t("app_title"), self.t("need_photo"), parent=self.root)
             return
 
         try:
             ensure_api_key(APP_DIR, prompt_fn=None)
         except Exception as exc:
-            messagebox.showerror("УПД Парсер", str(exc))
+            messagebox.showerror(self.t("app_title"), str(exc), parent=self.root)
             self.open_settings()
             return
 
-        output_path = ask_excel_output_path(self.root)
+        output_path = ask_excel_output_path(self.root, language=self.language)
         if output_path is None:
             return
 
         try:
             output_path = prepare_selected_excel_path(output_path)
         except Exception as exc:
-            messagebox.showerror("УПД Парсер", f"Не удалось подготовить Excel-файл:\n{exc}")
+            messagebox.showerror(self.t("app_title"), self.t("preparing_excel_failed", error=exc), parent=self.root)
             return
 
         self.processing = True
         self.set_controls_enabled(False)
         self.progress.configure(value=0, maximum=len(self.files))
-        self.status_var.set("Обработка началась")
-        self.append_log("Старт обработки.")
-        self.append_log(f"Excel будет сохранен: {output_path}")
+        self.status_var.set(self.t("processing_started"))
+        self.append_log(self.t("start_processing"))
+        self.append_log(self.t("excel_target", path=output_path))
 
         self.last_output_path = output_path
         files_snapshot = list(self.files)
 
+        staging_path = build_staging_excel_path(output_path)
         thread = threading.Thread(
             target=self.worker,
-            args=(files_snapshot, output_path),
-            daemon=True,
+            args=(files_snapshot, output_path, staging_path),
+            daemon=False,
         )
+        self.worker_thread = thread
         thread.start()
 
-    def worker(self, files: list[Path], output_path: Path) -> None:
+    def worker(self, files: list[Path], output_path: Path, staging_path: Path) -> None:
         try:
             summaries, rows_added = process_image_sequence(
                 files,
-                output_path,
+                staging_path,
                 on_progress=self.events.put,
+                language=self.language,
             )
+            successful_documents = [item for item in summaries if not item.get("error")]
+            output_saved = bool(successful_documents and staging_path.is_file())
+            if output_saved:
+                commit_staged_excel(staging_path, output_path)
+            else:
+                discard_staged_excel(staging_path)
             self.events.put(
                 {
                     "type": "done",
                     "summaries": summaries,
                     "rows": rows_added,
                     "output_path": str(output_path),
+                    "output_saved": output_saved,
                 }
             )
         except Exception as exc:
+            discard_staged_excel(staging_path)
             self.events.put({"type": "fatal", "message": str(exc)})
 
     def poll_events(self) -> None:
@@ -1197,7 +1269,7 @@ class MinimalUpdApp:
             done = int(event.get("done", 0))
             total = int(event.get("total", 1))
             self.progress.configure(maximum=total, value=done)
-            self.status_var.set(f"Обработано {done} из {total}")
+            self.status_var.set(self.t("processed_progress", done=done, total=total))
             return
 
         if event_type == "done":
@@ -1207,30 +1279,35 @@ class MinimalUpdApp:
             errors = [item for item in summaries if item.get("error")]
             rows = int(event.get("rows", 0))
             output_path = str(event.get("output_path", ""))
+            output_saved = bool(event.get("output_saved"))
 
             if errors:
-                self.status_var.set(f"Готово с ошибками. Строк: {rows}")
-                self.append_log(f"Файлов с ошибками: {len(errors)}")
+                self.status_var.set(self.t("done_errors_rows", rows=rows))
+                self.append_log(self.t("files_with_errors", count=len(errors)))
+                if not output_saved:
+                    self.append_log(self.t("no_report_created"))
                 messagebox.showwarning(
-                    "УПД Парсер",
-                    f"Обработка завершена с ошибками.\nСтрок в Excel: {rows}\n{output_path}",
+                    self.t("app_title"),
+                    self.t("processing_complete_errors", rows=rows, path=output_path) if output_saved else self.t("no_report_created"),
+                    parent=self.root,
                 )
             else:
-                self.status_var.set(f"Готово. Строк: {rows}")
-                self.append_log(f"Excel сохранен: {output_path}")
+                self.status_var.set(self.t("done_rows", rows=rows))
+                self.append_log(self.t("excel_saved", path=output_path))
                 messagebox.showinfo(
-                    "УПД Парсер",
-                    f"Готово.\nСтрок в Excel: {rows}\n{output_path}",
+                    self.t("app_title"),
+                    self.t("processing_complete", rows=rows, path=output_path),
+                    parent=self.root,
                 )
             return
 
         if event_type == "fatal":
             self.processing = False
             self.set_controls_enabled(True)
-            message = str(event.get("message", "Неизвестная ошибка"))
-            self.status_var.set("Ошибка обработки")
+            message = str(event.get("message", self.t("unknown_error")))
+            self.status_var.set(self.t("processing_failed"))
             self.append_log(message)
-            messagebox.showerror("УПД Парсер", message)
+            messagebox.showerror(self.t("app_title"), message, parent=self.root)
 
     def set_controls_enabled(self, enabled: bool) -> None:
         state = self.tk.NORMAL if enabled else self.tk.DISABLED

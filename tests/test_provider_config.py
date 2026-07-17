@@ -99,6 +99,23 @@ class ProviderPingTests(unittest.TestCase):
                     ai_parser.AIParser.ping("custom:test", "vision-model", "secret-token")
         self.assertNotIn("secret-token", str(context.exception))
 
+    @patch("ai_parser.requests.post")
+    def test_unsaved_connection_can_be_checked_without_persisting_profile(self, post):
+        response = Mock(ok=True)
+        response.json.return_value = {"choices": [{"message": {"content": "OK"}}]}
+        post.return_value = response
+
+        result = ai_parser.AIParser.ping_connection(
+            "Draft provider",
+            "https://draft.example/v1",
+            "vision-model",
+            "draft-secret",
+        )
+
+        self.assertIn("Draft provider", result)
+        self.assertEqual(post.call_args.args[0], "https://draft.example/v1/chat/completions")
+        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer draft-secret")
+
 
 if __name__ == "__main__":
     unittest.main()

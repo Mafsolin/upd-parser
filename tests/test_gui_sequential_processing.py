@@ -124,7 +124,7 @@ class GuiSequentialProcessingTests(unittest.TestCase):
 
         self.assertIsNone(path)
 
-    def test_existing_selected_excel_file_is_replaced_before_write(self):
+    def test_existing_selected_excel_file_is_preserved_until_atomic_commit(self):
         from standalone_upd import process_upd
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -132,9 +132,47 @@ class GuiSequentialProcessingTests(unittest.TestCase):
             path.write_text("old", encoding="utf-8")
 
             prepared = process_upd.prepare_selected_excel_path(path)
+            staging = process_upd.build_staging_excel_path(prepared)
+            staging.write_text("new", encoding="utf-8")
 
             self.assertEqual(prepared, path)
-            self.assertFalse(path.exists())
+            self.assertEqual(path.read_text(encoding="utf-8"), "old")
+            process_upd.commit_staged_excel(staging, prepared)
+            self.assertEqual(path.read_text(encoding="utf-8"), "new")
+            self.assertFalse(staging.exists())
+
+    def test_selected_output_is_always_xlsx(self):
+        from standalone_upd import process_upd
+
+        with tempfile.TemporaryDirectory() as tmp:
+            prepared = process_upd.prepare_selected_excel_path(Path(tmp) / "report.txt")
+            self.assertEqual(prepared.suffix, ".xlsx")
+
+    def test_failed_staging_does_not_touch_existing_excel(self):
+        from standalone_upd import process_upd
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "report.xlsx"
+            path.write_text("old", encoding="utf-8")
+            staging = process_upd.build_staging_excel_path(path)
+            process_upd.discard_staged_excel(staging)
+            self.assertEqual(path.read_text(encoding="utf-8"), "old")
+
+    def test_close_is_blocked_while_processing(self):
+        from standalone_upd import process_upd
+
+        app = process_upd.MinimalUpdApp.__new__(process_upd.MinimalUpdApp)
+        app.processing = True
+        app.language = "en"
+        app.root = mock.Mock()
+        with mock.patch("tkinter.messagebox.showwarning") as warning:
+            app.on_close()
+        app.root.destroy.assert_not_called()
+        warning.assert_called_once()
+
+        app.processing = False
+        app.on_close()
+        app.root.destroy.assert_called_once()
 
     def test_settings_without_provider_requires_configuration(self):
         from standalone_upd import process_upd
@@ -199,6 +237,12 @@ class GuiSequentialProcessingTests(unittest.TestCase):
         self.assertIn("<Control-KeyPress>", widget.bindings)
         event = type("Event", (), {"keycode": 86})()
         self.assertEqual(widget.bindings["<Control-KeyPress>"](event), "break")
+        for keycode, sequence in ((65, "<<SelectAll>>"), (67, "<<Copy>>"), (88, "<<Cut>>")):
+            with self.subTest(keycode=keycode):
+                result = widget.bindings["<Control-KeyPress>"](type("Event", (), {"keycode": keycode})())
+                self.assertEqual(result, "break")
+                self.assertIn(sequence, widget.events)
+        self.assertIn("<Shift-Insert>", widget.bindings)
 
 
 if __name__ == "__main__":

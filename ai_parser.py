@@ -17,12 +17,14 @@ from PIL import Image, ImageOps
 from data_normalizer import normalize_document
 from config import (
     EXTRACTION_PROMPT,
+    ProviderConfig,
     RETRY_COUNT,
     RETRY_DELAY,
     SUPPORTED_EXTENSIONS,
     get_api_key,
     get_model,
     get_provider,
+    normalize_api_url,
 )
 
 logger = logging.getLogger(__name__)
@@ -194,6 +196,34 @@ class AIParser:
     def ping(cls, provider_id: str | None = None, model: str | None = None, api_key: str | None = None) -> str:
         """Проверяет доступность выбранных endpoint, ключа и модели без отправки изображения."""
         parser = cls(provider_id, model, api_key)
+        return cls._ping_parser(parser)
+
+    @classmethod
+    def ping_connection(cls, label: str, base_url: str, model: str, api_key: str) -> str:
+        """Check an unsaved provider draft without mutating the active configuration."""
+        normalized_label = label.strip()
+        normalized_model = model.strip()
+        normalized_key = api_key.strip()
+        if not all((normalized_label, normalized_model, normalized_key)):
+            raise RuntimeError("Заполните название, API-ключ и модель.")
+        parser = cls.__new__(cls)
+        parser.provider = ProviderConfig(
+            id="draft",
+            label=normalized_label,
+            api_url=normalize_api_url(base_url),
+            key_env="",
+            models=(normalized_model,),
+            default_model=normalized_model,
+            api_key=normalized_key,
+        )
+        parser.model = normalized_model
+        parser.api_key = normalized_key
+        parser.headers = {"Authorization": f"Bearer {normalized_key}", "Content-Type": "application/json"}
+        parser.progress_callback = None
+        return cls._ping_parser(parser)
+
+    @staticmethod
+    def _ping_parser(parser: "AIParser") -> str:
         payload = {
             "model": parser.model,
             "messages": [{"role": "user", "content": "Ответь одним словом: OK"}],
