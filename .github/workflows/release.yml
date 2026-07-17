@@ -41,14 +41,18 @@ jobs:
       - name: Package portable version
         shell: pwsh
         run: Compress-Archive -Path ../UPD_Parser_Portable/* -DestinationPath UPD_Parser_Portable.zip
+      - name: Stage release assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release-assets -Force | Out-Null
+          Copy-Item ../UPD_Parser_OneFile/UPD_Parser.exe release-assets/UPD_Parser.exe
+          Copy-Item UPD_Parser_Portable.zip release-assets/UPD_Parser_Portable.zip
       - name: Upload verified release assets
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-assets
           if-no-files-found: error
-          path: |
-            ../UPD_Parser_OneFile/UPD_Parser.exe
-            UPD_Parser_Portable.zip
+          path: release-assets/*
 
   release:
     needs: build

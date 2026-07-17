@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.9
+## 1.0.10
 
 - protected provider API keys with Windows DPAPI and migrated legacy plaintext profiles;
 - prevented Excel formula injection and destructive report replacement;
@@ -12,3 +12,4 @@
 - verified update assets with GitHub SHA-256 digests and added updater backup/rollback;
 - restored portable first-run configuration through a CLI wizard;
 - added regular CI, pinned dependencies/actions and separated release permissions.
+- fixed GitHub Actions release asset staging for current artifact upload rules.

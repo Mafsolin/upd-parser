@@ -19,6 +19,8 @@ class ReleaseHardeningTests(unittest.TestCase):
         self.assertIn("contents: write", workflow)
         self.assertIn("actions/upload-artifact@", workflow)
         self.assertIn("actions/download-artifact@", workflow)
+        self.assertIn("path: release-assets/*", workflow)
+        self.assertNotIn("../UPD_Parser_OneFile/UPD_Parser.exe\n            UPD_Parser_Portable.zip", workflow)
 
     def test_regular_ci_runs_without_a_release_tag(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
