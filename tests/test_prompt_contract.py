@@ -4,6 +4,7 @@ from pathlib import Path
 
 import ai_parser
 from config import EXTRACTION_PROMPT
+from PIL import Image
 
 
 class PromptContractTests(unittest.TestCase):
@@ -18,7 +19,7 @@ class PromptContractTests(unittest.TestCase):
     def test_parser_sends_extraction_prompt_as_system_message(self):
         with tempfile.TemporaryDirectory() as tmp:
             image = Path(tmp) / "page001.jpg"
-            image.write_bytes(b"fake-image")
+            Image.new("RGB", (2, 2), "white").save(image)
 
             messages = ai_parser._build_messages([image])
 

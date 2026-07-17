@@ -14,7 +14,7 @@ class DataNormalizerTests(unittest.TestCase):
 
     def test_excel_numeric_value_is_a_number_not_text(self):
         self.assertEqual(excel_numeric_value("1 234,50-"), 1234.50)
-        self.assertEqual(excel_numeric_value("без НДС"), "безНДС")
+        self.assertEqual(excel_numeric_value("без НДС", allow_without_vat=True), "без НДС")
 
     def test_normalizes_only_exported_numeric_fields(self):
         data = normalize_document({

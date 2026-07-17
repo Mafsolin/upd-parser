@@ -70,6 +70,35 @@ class ProviderPingTests(unittest.TestCase):
                     ai_parser.AIParser.ping("custom:test", "vision-model", "secret-token")
         self.assertNotIn("secret-token", str(context.exception))
 
+    @patch("ai_parser.requests.post")
+    def test_ping_redacts_key_echoed_by_provider(self, post):
+        response = Mock(ok=False, status_code=401, text="secret-token")
+        response.json.return_value = {"error": {"message": "rejected secret-token"}}
+        post.return_value = response
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profiles.json"
+            path.write_text(json.dumps({"profiles": [{
+                "id": "test", "name": "Тест", "base_url": "https://api.example.com/v1",
+                "api_key": "secret-token", "model": "vision-model",
+            }]}), encoding="utf-8")
+            with patch.dict(os.environ, {"UPD_CUSTOM_PROFILES_FILE": str(path)}, clear=True):
+                with self.assertRaises(RuntimeError) as context:
+                    ai_parser.AIParser.ping("custom:test", "vision-model", "secret-token")
+        self.assertNotIn("secret-token", str(context.exception))
+
+    @patch("ai_parser.requests.post", side_effect=ai_parser.requests.ConnectionError("failed secret-token"))
+    def test_ping_redacts_key_from_network_error(self, _post):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profiles.json"
+            path.write_text(json.dumps({"profiles": [{
+                "id": "test", "name": "Тест", "base_url": "https://api.example.com/v1",
+                "api_key": "secret-token", "model": "vision-model",
+            }]}), encoding="utf-8")
+            with patch.dict(os.environ, {"UPD_CUSTOM_PROFILES_FILE": str(path)}, clear=True):
+                with self.assertRaises(RuntimeError) as context:
+                    ai_parser.AIParser.ping("custom:test", "vision-model", "secret-token")
+        self.assertNotIn("secret-token", str(context.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

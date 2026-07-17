@@ -15,6 +15,11 @@ from data_normalizer import excel_numeric_value, normalize_document
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_excel_text(value: str) -> str:
+    """Force untrusted OCR text to remain a string in spreadsheet programs."""
+    return "'" + value if value.startswith(("=", "+", "-", "@")) else value
+
 # ────────────────────────────────────────────────────────────────────────────
 # Константы
 # ────────────────────────────────────────────────────────────────────────────
@@ -124,9 +129,9 @@ class ExcelWriter:
         counter     = _last_row_number(ws)
         rows_added  = 0
 
-        date           = data.get("date", "")
-        seller         = data.get("seller", "")
-        invoice_number = data.get("invoice_number", "")
+        date           = _safe_excel_text(data.get("date", ""))
+        seller         = _safe_excel_text(data.get("seller", ""))
+        invoice_number = _safe_excel_text(data.get("invoice_number", ""))
         items          = data.get("items", [])
 
         if not items:
@@ -140,12 +145,12 @@ class ExcelWriter:
             row = [
                 counter,
                 date,
-                item.get("name",  ""),
-                item.get("unit",  ""),
+                _safe_excel_text(item.get("name",  "")),
+                _safe_excel_text(item.get("unit",  "")),
                 excel_numeric_value(item.get("qty", "")),
                 excel_numeric_value(item.get("price", "")),
                 excel_numeric_value(item.get("total_with_vat", item.get("cost", ""))),
-                excel_numeric_value(item.get("tax", "")),
+                excel_numeric_value(item.get("tax", ""), allow_without_vat=True),
                 invoice_number,
                 seller,
             ]

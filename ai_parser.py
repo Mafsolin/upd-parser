@@ -3,13 +3,16 @@ ai_parser.py — отправка изображений в OpenAI-compatible AP
 """
 
 import base64
+import io
 import json
 import logging
 import re
 import time
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import requests
+from PIL import Image, ImageOps
 
 from data_normalizer import normalize_document
 from config import (
@@ -27,16 +30,30 @@ logger = logging.getLogger(__name__)
 
 def _image_to_base64(path: Path) -> tuple[str, str]:
     """Читает файл и возвращает (mime_type, base64_string)."""
-    mime_map = {
-        ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-        ".webp": "image/webp", ".bmp": "image/bmp", ".tiff": "image/tiff",
-    }
-    with open(path, "rb") as file:
-        return mime_map.get(path.suffix.lower(), "image/jpeg"), base64.b64encode(file.read()).decode("utf-8")
+    suffix = path.suffix.lower()
+    output_format, mime = {
+        ".jpg": ("JPEG", "image/jpeg"), ".jpeg": ("JPEG", "image/jpeg"),
+        ".png": ("PNG", "image/png"), ".webp": ("WEBP", "image/webp"),
+        ".bmp": ("PNG", "image/png"), ".tif": ("PNG", "image/png"),
+        ".tiff": ("PNG", "image/png"),
+    }.get(suffix, ("JPEG", "image/jpeg"))
+    with Image.open(path) as source:
+        source.seek(0)  # Multi-page TIFFs are represented safely by their first page.
+        prepared = ImageOps.exif_transpose(source).copy()
+    if output_format == "JPEG" and prepared.mode not in ("RGB", "L"):
+        prepared = prepared.convert("RGB")
+    buffer = io.BytesIO()
+    prepared.save(buffer, format=output_format)
+    return mime, base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
 def _collect_images(folder: Path) -> list[Path]:
-    return sorted(path for path in folder.iterdir() if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS)
+    def natural_key(path: Path):
+        return tuple(int(part) if part.isdigit() else part.casefold() for part in re.split(r"(\d+)", path.name))
+    return sorted(
+        (path for path in folder.iterdir() if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS),
+        key=natural_key,
+    )
 
 
 def _build_messages(images: list[Path]) -> list[dict]:
@@ -110,25 +127,68 @@ def _api_error_message(response: requests.Response) -> str:
     status = response.status_code
     try:
         data = response.json()
-        detail = data.get("error", data.get("message", ""))
-        if isinstance(detail, dict):
-            detail = detail.get("message", "")
+        if isinstance(data, dict):
+            detail = data.get("error", data.get("message", ""))
+            if isinstance(detail, dict):
+                detail = detail.get("message", "")
+        else:
+            detail = response.text[:300]
     except ValueError:
         detail = response.text[:300]
     detail = str(detail).strip().replace("\n", " ")[:300]
     return f"HTTP {status}" + (f": {detail}" if detail else "")
 
 
+def _response_content(response: requests.Response) -> str:
+    """Validate the common OpenAI-compatible response shape in one place."""
+    try:
+        data = response.json()
+    except (ValueError, TypeError) as exc:
+        raise ValueError("Провайдер вернул ответ в неожиданном формате.") from exc
+    if not isinstance(data, dict):
+        raise ValueError("Провайдер вернул ответ в неожиданном формате.")
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        raise ValueError("Провайдер вернул ответ в неожиданном формате.")
+    message = choices[0].get("message")
+    if not isinstance(message, dict):
+        raise ValueError("Провайдер вернул ответ в неожиданном формате.")
+    content = message.get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("Провайдер вернул пустой content или ответ в неожиданном формате.")
+    return content
+
+
+def _retry_after_seconds(response: requests.Response) -> float | None:
+    value = response.headers.get("Retry-After") if response.headers else None
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        try:
+            delay = (parsedate_to_datetime(value) - parsedate_to_datetime(response.headers.get("Date"))).total_seconds()
+            return max(0.0, delay)
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+
 class AIParser:
     """Отправляет страницы УПД в выбранный API и возвращает структурированные данные."""
 
-    def __init__(self, provider_id: str | None = None, model: str | None = None, api_key: str | None = None):
+    def __init__(self, provider_id: str | None = None, model: str | None = None, api_key: str | None = None,
+                 progress_callback=None):
         self.provider = get_provider(provider_id)
         self.model = get_model(self.provider.id, model)
         self.api_key = (api_key if api_key is not None else get_api_key(self.provider.id)).strip()
         if not self.api_key:
             raise RuntimeError(f"API-ключ для {self.provider.label} не задан. Укажите его в настройках.")
         self.headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        self.progress_callback = progress_callback
+
+    def _redact(self, value: object) -> str:
+        text = str(value)
+        return text.replace(self.api_key, "***") if self.api_key else text
 
     @classmethod
     def ping(cls, provider_id: str | None = None, model: str | None = None, api_key: str | None = None) -> str:
@@ -143,13 +203,10 @@ class AIParser:
         try:
             response = requests.post(parser.provider.api_url, headers=parser.headers, json=payload, timeout=30)
             if not response.ok:
-                raise RuntimeError(_api_error_message(response))
-            data = response.json()
-            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            if not content:
-                raise RuntimeError("Провайдер вернул пустой ответ.")
+                raise RuntimeError(parser._redact(_api_error_message(response)))
+            _response_content(response)
         except requests.RequestException as exc:
-            raise RuntimeError(f"Не удалось подключиться к {parser.provider.label}: {exc}") from exc
+            raise RuntimeError(f"Не удалось подключиться к {parser.provider.label}: {parser._redact(exc)}") from exc
         except (ValueError, IndexError, KeyError) as exc:
             raise RuntimeError("Провайдер вернул ответ в неожиданном формате.") from exc
         return f"{parser.provider.label}: модель {parser.model} доступна."
@@ -170,17 +227,29 @@ class AIParser:
         payload = {"model": self.model, "messages": messages, "temperature": 0, "max_tokens": 8192}
         last_error: Exception | None = None
         for attempt in range(1, RETRY_COUNT + 1):
+            callback = getattr(self, "progress_callback", None)
+            if callback:
+                callback(attempt)
+            retry_delay = RETRY_DELAY
             try:
                 response = requests.post(self.provider.api_url, headers=self.headers, json=payload, timeout=120)
                 if not response.ok:
-                    raise RuntimeError(_api_error_message(response))
-                content = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-                if not content:
-                    raise ValueError("Пустой content в ответе API.")
-                return content
-            except (requests.RequestException, RuntimeError, ValueError, KeyError, IndexError) as exc:
-                logger.warning("[%s] Ошибка %d/%d: %s", doc_name, attempt, RETRY_COUNT, exc)
-                last_error = exc
+                    error = RuntimeError(self._redact(_api_error_message(response)))
+                    if response.status_code not in (408, 429) and not 500 <= response.status_code <= 599:
+                        raise error
+                    retry_delay = _retry_after_seconds(response) or RETRY_DELAY
+                    last_error = error
+                else:
+                    return _response_content(response)
+            except requests.RequestException as exc:
+                last_error = RuntimeError(self._redact(exc))
+            except ValueError as exc:
+                # A successful but malformed response is deterministic and must not be retried.
+                raise RuntimeError(self._redact(exc)) from exc
+            except RuntimeError:
+                raise
+            if last_error is not None:
+                logger.warning("[%s] Ошибка %d/%d: %s", doc_name, attempt, RETRY_COUNT, self._redact(last_error))
             if attempt < RETRY_COUNT:
-                time.sleep(RETRY_DELAY)
-        raise RuntimeError(f"[{doc_name}] {self.provider.label} не ответил корректно после {RETRY_COUNT} попыток. Последняя ошибка: {last_error}")
+                time.sleep(retry_delay)
+        raise RuntimeError(f"[{doc_name}] {self.provider.label} не ответил корректно после {RETRY_COUNT} попыток. Последняя ошибка: {self._redact(last_error)}")
