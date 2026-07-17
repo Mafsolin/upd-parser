@@ -384,7 +384,6 @@ def ensure_cli_provider(app_dir: Path, prompt_fn: Callable[[str], str] = input) 
         return existing_key
     if list_provider_profiles(app_dir):
         return ensure_api_key(app_dir, prompt_fn=prompt_fn)
-    print("Первый запуск: настройте OpenAI-совместимого провайдера.")
     name = prompt_fn("Название провайдера: ").strip()
     base_url = prompt_fn("Базовый URL или полный /chat/completions endpoint: ").strip()
     model = prompt_fn("Модель: ").strip()

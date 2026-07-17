@@ -1,8 +1,10 @@
 import importlib.util
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,7 +69,9 @@ class SettingsPersistenceTests(unittest.TestCase):
         answers = iter(("My API", "https://api.example.com/v1", "vision-model", "secret-key"))
         with tempfile.TemporaryDirectory() as tmp:
             app_dir = Path(tmp)
-            api_key = module.ensure_cli_provider(app_dir, prompt_fn=lambda _prompt: next(answers))
+            cp1252_stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+            with mock.patch.object(module.sys, "stdout", cp1252_stdout):
+                api_key = module.ensure_cli_provider(app_dir, prompt_fn=lambda _prompt: next(answers))
             self.assertEqual(api_key, "secret-key")
             profiles = module.list_provider_profiles(app_dir)
             self.assertEqual(len(profiles), 1)
