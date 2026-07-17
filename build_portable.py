@@ -14,6 +14,7 @@ import subprocess
 import sys
 import urllib.request
 import zipfile
+import hashlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -23,11 +24,14 @@ PYTHON_VERSION = "3.12.10"
 PYTHON_ZIP = f"python-{PYTHON_VERSION}-embed-amd64.zip"
 PYTHON_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/{PYTHON_ZIP}"
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
+PYTHON_ZIP_SHA256 = "4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3"
+GET_PIP_SHA256 = "106ae019e371c7d8cb3699c75607a9b7a4d31e2b95c575362c8bcfe3d41353fd"
 
 APP_FILES = [
     "ai_parser.py",
     "app_version.py",
     "config.py",
+    "credential_store.py",
     "data_normalizer.py",
     "excel_writer.py",
     "i18n.py",
@@ -38,10 +42,10 @@ APP_FILES = [
 ]
 
 STANDALONE_PACKAGES = [
-    "requests>=2.31.0",
-    "openpyxl>=3.1.2",
-    "python-dotenv>=1.0.0",
-    "Pillow>=10.0.0",
+    "requests==2.33.0",
+    "openpyxl==3.1.5",
+    "python-dotenv==1.2.2",
+    "Pillow==12.3.0",
 ]
 
 
@@ -129,12 +133,24 @@ def copy_app_files(target: Path) -> None:
     (target / ".env").write_text(env_template, encoding="utf-8")
 
 
-def download_file(url: str, destination: Path) -> None:
+def verify_sha256(path: Path, expected: str) -> None:
+    actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual.lower() != expected.lower():
+        raise RuntimeError(f"SHA-256 mismatch for {path.name}: expected {expected}, got {actual}")
+
+
+def download_file(url: str, destination: Path, expected_sha256: str) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
+        verify_sha256(destination, expected_sha256)
         return
     print(f"Downloading {url}")
     urllib.request.urlretrieve(url, destination)
+    try:
+        verify_sha256(destination, expected_sha256)
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
 
 
 def prepare_embedded_python(runtime_dir: Path) -> Path:
@@ -145,7 +161,7 @@ def prepare_embedded_python(runtime_dir: Path) -> Path:
         return python_exe
 
     archive = CACHE_DIR / PYTHON_ZIP
-    download_file(PYTHON_URL, archive)
+    download_file(PYTHON_URL, archive, PYTHON_ZIP_SHA256)
 
     with zipfile.ZipFile(archive) as zip_file:
         zip_file.extractall(runtime_dir)
@@ -184,7 +200,7 @@ def configure_pth(runtime_dir: Path) -> None:
 
 def install_dependencies(python_exe: Path) -> None:
     get_pip = CACHE_DIR / "get-pip.py"
-    download_file(GET_PIP_URL, get_pip)
+    download_file(GET_PIP_URL, get_pip, GET_PIP_SHA256)
 
     subprocess.run([str(python_exe), str(get_pip)], check=True)
     subprocess.run(

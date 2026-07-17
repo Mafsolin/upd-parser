@@ -34,6 +34,23 @@ class ProviderConfigTests(unittest.TestCase):
                 self.assertEqual(config.get_model(provider_id), "vision-model")
                 self.assertEqual(config.get_api_key(provider_id), "secret")
 
+    def test_full_endpoint_keeps_query_parameters(self):
+        endpoint = "https://api.example.com/v1/chat/completions?api-version=2026-01-01"
+        self.assertEqual(config.normalize_api_url(endpoint), endpoint)
+
+    def test_plain_http_is_allowed_only_for_loopback(self):
+        with self.assertRaisesRegex(ValueError, "HTTPS"):
+            config.normalize_api_url("http://api.example.com/v1")
+        self.assertEqual(
+            config.normalize_api_url("http://127.0.0.1:8080/v1"),
+            "http://127.0.0.1:8080/v1/chat/completions",
+        )
+
+    def test_provider_url_rejects_credentials_and_fragments(self):
+        for value in ("https://user:pass@example.com/v1", "https://example.com/v1#fragment"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                config.normalize_api_url(value)
+
 
 class ProviderPingTests(unittest.TestCase):
     @patch("ai_parser.requests.post")

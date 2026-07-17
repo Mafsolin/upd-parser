@@ -65,6 +65,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from app_version import APP_VERSION, GITHUB_URL
 from i18n import LANGUAGES, tr
 from update_manager import apply_downloaded_update, check_for_update, download_update
+from credential_store import protect_secret, unprotect_secret
 
 logger = logging.getLogger("standalone_upd")
 
@@ -171,7 +172,9 @@ def _read_env_values(env_path: Path) -> dict[str, str]:
 
 def _write_env_values(env_path: Path, values: dict[str, str]) -> None:
     lines = [f"{key}={value}" for key, value in values.items() if value]
-    env_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    temporary = env_path.with_name(f".{env_path.name}.{uuid.uuid4().hex}.tmp")
+    temporary.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    os.replace(temporary, env_path)
 
 
 def _env_candidates(app_dir: Path) -> list[Path]:
@@ -230,19 +233,38 @@ def _read_custom_profiles(app_dir: Path) -> list[dict[str, str]]:
 
 
 def _write_custom_profiles(app_dir: Path, profiles: list[dict[str, str]]) -> None:
-    custom_profiles_path(app_dir).write_text(
+    path = custom_profiles_path(app_dir)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    temporary.write_text(
         json.dumps({"profiles": profiles}, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    os.replace(temporary, path)
 
 
 def list_provider_profiles(app_dir: Path) -> list[dict[str, str]]:
     """User-created profiles, suitable for the settings UI."""
     profiles: list[dict[str, str]] = []
     for profile in _read_custom_profiles(app_dir):
+        protected_key = str(profile.get("api_key_protected", ""))
+        if protected_key:
+            profile["api_key"] = unprotect_secret(protected_key)
         profile["id"] = f"custom:{profile.get('id', '').strip()}"
         profiles.append(profile)
     return profiles
+
+
+def migrate_profile_secrets(app_dir: Path) -> None:
+    profiles = _read_custom_profiles(app_dir)
+    changed = False
+    for profile in profiles:
+        plain_key = str(profile.get("api_key", "")).strip()
+        if plain_key and not profile.get("api_key_protected"):
+            profile["api_key_protected"] = protect_secret(plain_key)
+            profile.pop("api_key", None)
+            changed = True
+    if changed:
+        _write_custom_profiles(app_dir, profiles)
 
 
 def save_custom_profile(
@@ -254,7 +276,7 @@ def save_custom_profile(
         "id": (profile_id or uuid.uuid4().hex).removeprefix("custom:").strip(),
         "name": name.strip(),
         "base_url": base_url.strip(),
-        "api_key": api_key.strip(),
+        "api_key_protected": protect_secret(api_key.strip()),
         "model": model.strip(),
     }
     if not all(normalized.values()):
@@ -286,6 +308,7 @@ def delete_custom_profile(app_dir: Path, provider_id: str) -> None:
 
 
 def activate_settings(app_dir: Path) -> dict[str, str]:
+    migrate_profile_secrets(app_dir)
     values = load_settings(app_dir)
     values["UPD_CUSTOM_PROFILES_FILE"] = str(custom_profiles_path(app_dir).resolve())
     os.environ.update(values)
@@ -352,6 +375,23 @@ def ensure_api_key(app_dir: Path, prompt_fn: Callable[[str], str] | None | objec
     if not api_key:
         raise RuntimeError("API-ключ не задан.")
     return save_api_key(app_dir, api_key)
+
+
+def ensure_cli_provider(app_dir: Path, prompt_fn: Callable[[str], str] = input) -> str:
+    """Configure the first custom provider in portable CLI mode."""
+    existing_key = load_api_key(app_dir)
+    if existing_key:
+        return existing_key
+    if list_provider_profiles(app_dir):
+        return ensure_api_key(app_dir, prompt_fn=prompt_fn)
+    print("Первый запуск: настройте OpenAI-совместимого провайдера.")
+    name = prompt_fn("Название провайдера: ").strip()
+    base_url = prompt_fn("Базовый URL или полный /chat/completions endpoint: ").strip()
+    model = prompt_fn("Модель: ").strip()
+    api_key = prompt_fn("API-ключ: ").strip()
+    provider_id = save_custom_profile(app_dir, name, base_url, api_key, model)
+    save_settings(app_dir, provider_id, model, api_key)
+    return api_key
 
 
 def install_text_context_menu(widget, menu_factory: Callable[[Any], Any] | None = None, language: str | None = None):
@@ -540,7 +580,7 @@ def run_cli() -> int:
         return 2
 
     try:
-        ensure_api_key(APP_DIR)
+        ensure_cli_provider(APP_DIR)
     except Exception as exc:
         logger.error("%s", exc)
         return 3

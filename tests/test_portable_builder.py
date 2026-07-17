@@ -24,6 +24,14 @@ class PortableBuilderTests(unittest.TestCase):
         self.assertIn("--cli", content)
         self.assertIn("pause", content.lower())
 
+    def test_bootstrap_download_hash_is_verified(self):
+        module = self._load_builder_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "download.bin"
+            path.write_bytes(b"tampered")
+            with self.assertRaisesRegex(RuntimeError, "SHA-256"):
+                module.verify_sha256(path, "0" * 64)
+
     def test_copy_runtime_files_creates_expected_layout_without_runtime(self):
         module = self._load_builder_module()
 

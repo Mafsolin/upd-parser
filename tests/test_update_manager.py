@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from update_manager import ReleaseInfo, check_for_update, create_updater_script, parse_version
+from update_manager import ReleaseInfo, check_for_update, create_updater_script, download_update, parse_version
 
 
 class UpdateManagerTests(unittest.TestCase):
@@ -16,10 +16,16 @@ class UpdateManagerTests(unittest.TestCase):
     def test_version_comparison_and_exe_asset(self):
         payload = {
             "tag_name": "v1.1.0", "body": "Changes",
-            "assets": [{"name": "UPD_Parser.exe", "browser_download_url": "https://example.test/app.exe"}],
+            "assets": [{
+                "name": "UPD_Parser.exe",
+                "browser_download_url": "https://github.com/Mafsolin/upd-parser/releases/download/v1.1.0/UPD_Parser.exe",
+                "digest": "sha256:" + "a" * 64,
+                "size": 123,
+            }],
         }
         release = check_for_update("1.0.0", request_get=lambda _url, **_kwargs: self.response(payload))
-        self.assertEqual(release, ReleaseInfo("1.1.0", "https://example.test/app.exe", "Changes"))
+        self.assertEqual(release.digest, "a" * 64)
+        self.assertEqual(release.size, 123)
 
     def test_missing_or_equal_release_is_not_an_update(self):
         self.assertIsNone(check_for_update("1.0.0", request_get=lambda _url, **_kwargs: self.response({}, status=404)))
@@ -35,6 +41,25 @@ class UpdateManagerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_version("newest")
 
+    def test_malformed_release_payload_is_reported_cleanly(self):
+        for payload in ([], {"tag_name": "v2.0.0", "assets": None}):
+            with self.subTest(payload=payload), self.assertRaises(RuntimeError):
+                check_for_update("1.0.0", request_get=lambda _url, _payload=payload, **_kwargs: self.response(_payload))
+
+    def test_download_rejects_digest_mismatch_and_non_executable(self):
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.iter_content.return_value = [b"not-an-exe"]
+        release = ReleaseInfo(
+            "1.1.0",
+            "https://github.com/Mafsolin/upd-parser/releases/download/v1.1.0/UPD_Parser.exe",
+            "",
+            "0" * 64,
+            10,
+        )
+        with self.assertRaisesRegex(RuntimeError, "SHA-256"):
+            download_update(release, request_get=lambda _url, **_kwargs: response)
+
     def test_updater_replaces_only_executable(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -43,9 +68,11 @@ class UpdateManagerTests(unittest.TestCase):
             profiles = root / "upd_provider_profiles.json"
             profiles.write_text("{}", encoding="utf-8")
             script = create_updater_script(exe, update)
-            content = script.read_text(encoding="utf-8")
+            content = script.read_text(encoding="utf-8-sig")
         self.assertIn(str(exe), content)
         self.assertNotIn(profiles.name, content)
+        self.assertIn("Backup", content)
+        self.assertIn("Start-Process", content)
 
 
 if __name__ == "__main__":

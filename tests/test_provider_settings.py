@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import os
 import tempfile
 import unittest
@@ -25,6 +26,9 @@ class SettingsPersistenceTests(unittest.TestCase):
                 app_dir, "Мой API", "https://api.example.com/v1", "secret", "vision-model",
             )
             self.assertTrue(provider_id.startswith("custom:"))
+            stored_profiles = module.custom_profiles_path(app_dir).read_text(encoding="utf-8")
+            self.assertNotIn('"api_key": "secret"', stored_profiles)
+            self.assertIn("api_key_protected", stored_profiles)
             module.save_settings(app_dir, provider_id, "vision-model", "secret")
 
             profiles = module.list_provider_profiles(app_dir)
@@ -58,6 +62,34 @@ class SettingsPersistenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(RuntimeError, "Провайдер не настроен"):
                 module.ensure_api_key(Path(tmp))
+
+    def test_cli_wizard_creates_first_provider_profile(self):
+        module = self.load_runner()
+        answers = iter(("My API", "https://api.example.com/v1", "vision-model", "secret-key"))
+        with tempfile.TemporaryDirectory() as tmp:
+            app_dir = Path(tmp)
+            api_key = module.ensure_cli_provider(app_dir, prompt_fn=lambda _prompt: next(answers))
+            self.assertEqual(api_key, "secret-key")
+            profiles = module.list_provider_profiles(app_dir)
+            self.assertEqual(len(profiles), 1)
+            self.assertEqual(profiles[0]["name"], "My API")
+            self.assertEqual(module.load_settings(app_dir)["UPD_PROVIDER"], profiles[0]["id"])
+
+    def test_legacy_plaintext_key_is_migrated_on_activation(self):
+        module = self.load_runner()
+        with tempfile.TemporaryDirectory() as tmp:
+            app_dir = Path(tmp)
+            module.custom_profiles_path(app_dir).write_text(
+                json.dumps({"profiles": [{
+                    "id": "legacy", "name": "Legacy", "base_url": "https://api.example.com/v1",
+                    "api_key": "plain-secret", "model": "vision-model",
+                }]}),
+                encoding="utf-8",
+            )
+            module.activate_settings(app_dir)
+            stored = module.custom_profiles_path(app_dir).read_text(encoding="utf-8")
+            self.assertNotIn('"api_key": "plain-secret"', stored)
+            self.assertIn("api_key_protected", stored)
 
 
 if __name__ == "__main__":

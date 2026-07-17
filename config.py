@@ -1,9 +1,12 @@
 import json
 import os
+import ipaddress
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from dotenv import load_dotenv
+from credential_store import unprotect_secret
 
 load_dotenv()
 
@@ -28,12 +31,28 @@ CUSTOM_PROVIDER_PREFIX = "custom:"
 
 def normalize_api_url(value: str) -> str:
     """Accept an OpenAI base URL or a full chat-completions endpoint."""
-    url = value.strip().rstrip("/")
-    if not url.startswith(("https://", "http://")):
+    raw_url = value.strip()
+    parsed = urlsplit(raw_url)
+    if parsed.scheme not in {"https", "http"} or not parsed.hostname:
         raise ValueError("Базовый URL должен начинаться с http:// или https://.")
-    if not url.endswith("/chat/completions"):
-        url += "/chat/completions"
-    return url
+    if parsed.username or parsed.password:
+        raise ValueError("URL не должен содержать имя пользователя или пароль.")
+    if parsed.fragment:
+        raise ValueError("URL не должен содержать fragment (#...).")
+    if parsed.scheme == "http":
+        host = parsed.hostname.casefold()
+        is_loopback = host == "localhost"
+        if not is_loopback:
+            try:
+                is_loopback = ipaddress.ip_address(host).is_loopback
+            except ValueError:
+                is_loopback = False
+        if not is_loopback:
+            raise ValueError("Для удалённого провайдера требуется HTTPS.")
+    path = parsed.path.rstrip("/")
+    if not path.endswith("/chat/completions"):
+        path += "/chat/completions"
+    return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, ""))
 
 
 def _custom_providers_path() -> Path | None:
@@ -61,7 +80,8 @@ def _load_custom_providers() -> dict[str, ProviderConfig]:
         profile_id = str(profile.get("id", "")).strip()
         name = str(profile.get("name", "")).strip()
         model = str(profile.get("model", "")).strip()
-        api_key = str(profile.get("api_key", "")).strip()
+        protected_key = str(profile.get("api_key_protected", "")).strip()
+        api_key = unprotect_secret(protected_key) if protected_key else str(profile.get("api_key", "")).strip()
         base_url = str(profile.get("base_url", "")).strip()
         if not all((profile_id, name, model, api_key, base_url)):
             continue

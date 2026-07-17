@@ -41,6 +41,7 @@ def pyinstaller_command() -> list[str]:
         "ai_parser",
         "--hidden-import",
         "config",
+        "credential_store",
         "--hidden-import",
         "excel_writer",
         "--hidden-import",
