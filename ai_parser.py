@@ -143,21 +143,23 @@ def _api_error_message(response: requests.Response) -> str:
 
 def _response_content(response: requests.Response) -> str:
     """Validate the common OpenAI-compatible response shape in one place."""
+    content_type = str(response.headers.get("Content-Type", "unknown")).split(";", 1)[0].strip() or "unknown"
+    unexpected = f"Провайдер вернул ответ в неожиданном формате (Content-Type: {content_type})."
     try:
         data = response.json()
     except (ValueError, TypeError) as exc:
-        raise ValueError("Провайдер вернул ответ в неожиданном формате.") from exc
+        raise ValueError(unexpected) from exc
     if not isinstance(data, dict):
-        raise ValueError("Провайдер вернул ответ в неожиданном формате.")
+        raise ValueError(unexpected)
     choices = data.get("choices")
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-        raise ValueError("Провайдер вернул ответ в неожиданном формате.")
+        raise ValueError(unexpected)
     message = choices[0].get("message")
     if not isinstance(message, dict):
-        raise ValueError("Провайдер вернул ответ в неожиданном формате.")
+        raise ValueError(unexpected)
     content = message.get("content")
     if not isinstance(content, str) or not content.strip():
-        raise ValueError("Провайдер вернул пустой content или ответ в неожиданном формате.")
+        raise ValueError(f"Провайдер вернул пустой content (Content-Type: {content_type}).")
     return content
 
 
@@ -229,6 +231,7 @@ class AIParser:
             "messages": [{"role": "user", "content": "Ответь одним словом: OK"}],
             "temperature": 0,
             "max_tokens": 8,
+            "stream": False,
         }
         try:
             response = requests.post(parser.provider.api_url, headers=parser.headers, json=payload, timeout=30)
@@ -254,7 +257,13 @@ class AIParser:
             raise ValueError("Модель вернула невалидный JSON. Обработка остановлена, чтобы избежать выдуманных данных. Попробуйте отправить фото повторно.") from exc
 
     def _call_api_with_retry(self, messages: list[dict], doc_name: str) -> str:
-        payload = {"model": self.model, "messages": messages, "temperature": 0, "max_tokens": 8192}
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0,
+            "max_tokens": 8192,
+            "stream": False,
+        }
         last_error: Exception | None = None
         for attempt in range(1, RETRY_COUNT + 1):
             callback = getattr(self, "progress_callback", None)

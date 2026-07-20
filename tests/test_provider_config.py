@@ -68,6 +68,7 @@ class ProviderPingTests(unittest.TestCase):
                 result = ai_parser.AIParser.ping("custom:test", "vision-model", "secret-token")
         self.assertIn("доступна", result)
         self.assertEqual(post.call_args.kwargs["json"]["model"], "vision-model")
+        self.assertIs(post.call_args.kwargs["json"]["stream"], False)
         self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer secret-token")
         self.assertEqual(post.call_args.args[0], "https://api.example.com/v1/chat/completions")
 

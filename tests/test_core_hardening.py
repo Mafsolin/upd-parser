@@ -117,9 +117,17 @@ class ApiHardeningTests(unittest.TestCase):
     def test_response_schema_rejects_null_or_array_without_type_errors(self):
         for payload in ({"choices": None}, [], {"choices": []}, {"choices": [None]}):
             response = Mock(ok=True)
+            response.headers = {"Content-Type": "application/json"}
             response.json.return_value = payload
             with self.subTest(payload=payload), self.assertRaisesRegex(ValueError, "формат"):
                 ai_parser._response_content(response)
+
+    def test_unexpected_response_reports_content_type_without_body(self):
+        response = Mock(ok=True, headers={"Content-Type": "text/event-stream; charset=utf-8"})
+        response.json.side_effect = requests.JSONDecodeError("invalid", "secret response body", 0)
+        with self.assertRaisesRegex(ValueError, "text/event-stream") as caught:
+            ai_parser._response_content(response)
+        self.assertNotIn("secret response body", str(caught.exception))
 
     def test_malformed_error_payload_still_produces_safe_http_error(self):
         response = Mock(status_code=500, text="fallback", headers={})
@@ -149,6 +157,7 @@ class ApiHardeningTests(unittest.TestCase):
         result = self.parser(progress.append)._call_api_with_retry([], "doc")
         self.assertEqual(result, "OK")
         self.assertEqual(post.call_count, 3)
+        self.assertIs(post.call_args.kwargs["json"]["stream"], False)
         self.assertIn(3.0, [call.args[0] for call in sleep.call_args_list])
         self.assertEqual(progress, [1, 2, 3])
 

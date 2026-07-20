@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.10
+## 1.0.11
 
 - protected provider API keys with Windows DPAPI and migrated legacy plaintext profiles;
 - prevented Excel formula injection and destructive report replacement;
@@ -13,3 +13,6 @@
 - restored portable first-run configuration through a CLI wizard;
 - added regular CI, pinned dependencies/actions and separated release permissions.
 - fixed GitHub Actions release asset staging for current artifact upload rules.
+- explicitly disabled streaming for provider checks and document processing;
+- added safe Content-Type diagnostics for malformed provider responses.
+- preserved provider profiles and application settings during local EXE rebuilds.

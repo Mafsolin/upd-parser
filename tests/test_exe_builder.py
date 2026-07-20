@@ -1,4 +1,5 @@
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -48,6 +49,24 @@ class ExeBuilderTests(unittest.TestCase):
     def test_runner_self_test_imports_packaged_dependencies(self):
         module = self._load_runner_module()
         self.assertEqual(module.self_test(), 0)
+
+    def test_clean_output_preserves_user_configuration(self):
+        module = self._load_builder_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            exe = output / "UPD_Parser.exe"
+            profile = output / "upd_provider_profiles.json"
+            settings = output / ".env"
+            exe.write_bytes(b"old executable")
+            profile.write_text("protected profiles", encoding="utf-8")
+            settings.write_text("UPD_LANGUAGE=ru", encoding="utf-8")
+
+            with mock.patch.object(module, "OUTPUT_DIR", output):
+                module.clean_output()
+
+            self.assertFalse(exe.exists())
+            self.assertEqual(profile.read_text(encoding="utf-8"), "protected profiles")
+            self.assertEqual(settings.read_text(encoding="utf-8"), "UPD_LANGUAGE=ru")
 
     @staticmethod
     def _load_runner_module():

@@ -5,7 +5,6 @@ Build a single Windows GUI exe for local UPD processing.
 from __future__ import annotations
 
 import importlib.util
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -77,9 +76,8 @@ def ensure_pyinstaller() -> None:
 
 
 def clean_output() -> None:
-    if OUTPUT_DIR.exists():
-        shutil.rmtree(OUTPUT_DIR)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DIR / f"{EXE_NAME}.exe").unlink(missing_ok=True)
 
 
 def build() -> Path:
